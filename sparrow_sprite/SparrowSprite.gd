@@ -25,6 +25,12 @@ var atlasTexture:AtlasTexture = AtlasTexture.new();
 @export var fps = 16;
 @export var loop = true;
 
+@export var sprite_centered:bool = true;
+@export var offset = Vector2.ZERO;
+
+@export var flip_h = false;
+@export var flip_v = false;
+
 var animation = 0:
 	set(value):
 		animation = value;
@@ -45,15 +51,20 @@ func reload():
 		return;
 		
 	while fileParser.read() == OK:
+		var width = fileParser.get_named_attribute_value_safe("width").to_int();
+		var height = fileParser.get_named_attribute_value_safe("height").to_int();
+		
+		var frame_width = fileParser.get_named_attribute_value_safe("frameWidth");
+		var frame_height = fileParser.get_named_attribute_value_safe("frameHeight");
 		var list = {
 			"x": fileParser.get_named_attribute_value_safe("x").to_int(),
 			"y": fileParser.get_named_attribute_value_safe("y").to_int(),
-			"width": fileParser.get_named_attribute_value_safe("width").to_int(),
-			"height": fileParser.get_named_attribute_value_safe("height").to_int(),
+			"width": width,
+			"height": height,
 			"frameX": fileParser.get_named_attribute_value_safe("frameX").to_int(),
 			"frameY": fileParser.get_named_attribute_value_safe("frameY").to_int(),
-			"frameWidth": fileParser.get_named_attribute_value_safe("frameWidth").to_int(),
-			"frameHeight": fileParser.get_named_attribute_value_safe("frameHeight").to_int(),
+			"frameWidth": width if frame_width == "" else frame_width.to_int(),
+			"frameHeight": height if frame_height == "" else frame_height.to_int(),
 			"rotated": fileParser.get_named_attribute_value_safe("rotated") == "true"
 		};
 		
@@ -83,6 +94,9 @@ func reload():
 	
 var timer = 0.0;
 func _process(delta: float) -> void:
+	scale.x = abs(scale.x) * (-1 if flip_h else 1);
+	scale.y = abs(scale.y) * (-1 if flip_v else 1);
+	
 	if frames.is_empty():
 		return;
 		
@@ -115,18 +129,18 @@ func _draw() -> void:
 		Vector2(currentFrame["width"], currentFrame["height"])
 	);
 	
-	var offset = Vector2(
+	var frame_offset = Vector2(
 		-int(currentFrame["frameX"]),
 		-int(currentFrame["frameY"])
 	);
 	if currentFrame["rotated"]:
-		offset = Vector2(
+		frame_offset = Vector2(
 			-currentFrame["frameY"],
 			-int(currentFrame["frameX"])
 		);
 		
 	var margin = Rect2(
-		offset,
+		frame_offset,
 		Vector2(int(currentFrame["frameWidth"]) - rect.size.x, int(currentFrame["frameHeight"]) - rect.size.y) if !currentFrame["rotated"] else Vector2(currentFrame["frameHeight"] - rect.size.x,currentFrame["frameWidth"] - rect.size.y)
 	);
 	
@@ -139,12 +153,18 @@ func _draw() -> void:
 	if atlasTexture.margin.size.y < abs(atlasTexture.margin.position.y):
 		atlasTexture.margin.size.y = abs(atlasTexture.margin.position.y);
 		
+	var draw_pos = offset;
+	if sprite_centered:
+		draw_pos -= Vector2(
+			currentFrame["frameWidth"] / 2.0,
+			currentFrame["frameHeight"] / 2.0
+		);
 	if currentFrame["rotated"]:
-		draw_set_transform(Vector2(0, currentFrame["frameHeight"]-currentFrame["frameY"]), -PI / 2.0, Vector2.ONE);
+		draw_set_transform(draw_pos + Vector2(0, currentFrame["frameHeight"] - currentFrame["frameY"]), -PI / 2.0, Vector2.ONE);
 		draw_texture(atlasTexture, Vector2.ZERO);
-		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE);
 	else:
-		draw_texture(atlasTexture, Vector2.ZERO);
+		draw_texture(atlasTexture, draw_pos);
 		
 func _get_property_list():
 	var properties: Array[Dictionary] = [];
