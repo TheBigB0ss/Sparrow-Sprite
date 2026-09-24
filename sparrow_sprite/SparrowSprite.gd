@@ -4,16 +4,16 @@ class_name SparrowSprite extends Node2D
 var atlasTexture:AtlasTexture = AtlasTexture.new();
 
 @export_group("animation path", "")
-@export var texture_path:Texture2D:
+@export var texture:Texture2D:
 	set(value):
-		texture_path = value;
-		atlasTexture.atlas = texture_path;
-		xml_path = str(texture_path.resource_path.substr(0, len(texture_path.resource_path)-3), "xml");
+		texture = value;
+		atlasTexture.atlas = texture;
+		xmlPath = str(texture.resource_path.substr(0, len(texture.resource_path)-3), "xml");
 		queue_redraw();
 		
-@export_file_path("*.xml") var xml_path = "":
+@export_file_path("*.xml") var xmlPath = "":
 	set(value):
-		xml_path = value;
+		xmlPath = value;
 		reload();
 		
 @export_group("playback")
@@ -46,10 +46,10 @@ func reload():
 	xmlList.clear();
 	
 	var fileParser = XMLParser.new();
-	fileParser.open(xml_path);
+	fileParser.open(xmlPath);
 	
 	if fileParser.read() != OK:
-		print("error in %s.xml"%[xml_path]);
+		print("error in %s.xml"%[xmlPath]);
 		return;
 		
 	while fileParser.read() == OK:
@@ -110,16 +110,12 @@ func _process(delta: float) -> void:
 		frame = int(timer);
 		queue_redraw();
 		
-func get_frame_info(anim) -> Array:
-	if xmlList.has(anim):
-		return xmlList[anim];
-		
-	return [];
+func get_frame_info(anim):
+	return xmlList.get(anim, []);
 	
 func get_anim_length(anim):
-	if xmlList.has(anim):
-		return len(xmlList[anim]);
-		
+	return xmlList.get(anim, []).size();
+	
 func _draw() -> void:
 	if frames.is_empty():
 		return;
