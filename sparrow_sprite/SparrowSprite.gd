@@ -3,34 +3,36 @@ class_name SparrowSprite extends Node2D
 
 var atlasTexture:AtlasTexture = AtlasTexture.new();
 
-@export var texture:Texture2D:
+@export_group("animation path", "")
+@export var texture_path:Texture2D:
 	set(value):
-		texture = value;
-		atlasTexture.atlas = texture;
-		xmlPath = str(texture.resource_path.substr(0, len(texture.resource_path)-3), "xml");
+		texture_path = value;
+		atlasTexture.atlas = texture_path;
+		xml_path = str(texture_path.resource_path.substr(0, len(texture_path.resource_path)-3), "xml");
 		queue_redraw();
 		
-@export_file_path("*.xml") var xmlPath = "":
+@export_file_path("*.xml") var xml_path = "":
 	set(value):
-		xmlPath = value;
+		xml_path = value;
 		reload();
 		
+@export_group("playback")
 @export var frame = 0;
+@export var fps = 16;
+@export var loop = true;
 @export var playing = true:
 	set(val):
 		if playing != val:
 			playing = val;
 			timer = 0.0;
 			
-@export var fps = 16;
-@export var loop = true;
-
-@export var sprite_centered:bool = true;
+@export_group("transform")
+@export var sprite_centered = true;
 @export var offset = Vector2.ZERO;
-
 @export var flip_h = false;
 @export var flip_v = false;
 
+@export_group("set animation")
 var animation = 0:
 	set(value):
 		animation = value;
@@ -44,10 +46,10 @@ func reload():
 	xmlList.clear();
 	
 	var fileParser = XMLParser.new();
-	fileParser.open(xmlPath);
+	fileParser.open(xml_path);
 	
 	if fileParser.read() != OK:
-		print("error in %s.xml"%[xmlPath]);
+		print("error in %s.xml"%[xml_path]);
 		return;
 		
 	while fileParser.read() == OK:
@@ -159,6 +161,7 @@ func _draw() -> void:
 			currentFrame["frameWidth"] / 2.0,
 			currentFrame["frameHeight"] / 2.0
 		);
+		
 	if currentFrame["rotated"]:
 		draw_set_transform(draw_pos + Vector2(0, currentFrame["frameHeight"] - currentFrame["frameY"]), -PI / 2.0, Vector2.ONE);
 		draw_texture(atlasTexture, Vector2.ZERO);
@@ -166,6 +169,16 @@ func _draw() -> void:
 	else:
 		draw_texture(atlasTexture, draw_pos);
 		
+func play(anim):
+	if !xmlList.has(anim):
+		return;
+		
+	animation = xmlList.keys().find(anim);
+	playing = true;
+	timer = 0;
+	frame = 0;
+	queue_redraw();
+	
 func _get_property_list():
 	var properties: Array[Dictionary] = [];
 	
@@ -178,16 +191,6 @@ func _get_property_list():
 	});
 	
 	return properties;
-	
-func play(anim):
-	if !xmlList.has(anim):
-		return;
-		
-	animation = xmlList.keys().find(anim);
-	playing = true;
-	timer = 0;
-	frame = 0;
-	queue_redraw();
 	
 func get_rect():
 	if frames.is_empty():
