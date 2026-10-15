@@ -26,19 +26,26 @@ var atlasTexture:AtlasTexture = AtlasTexture.new();
 		
 @export_group("playback")
 @export var frame = 0;
-@export var fps = 16:
+@export var fps = 16.0:
 	set(value):
-		value = abs(value);
-		fps = value;
+		fps = maxf(absf(value), 0.001)
 		
+		if current_animation.is_empty():
+			return;
+			
+		if anims_data.has(current_animation):
+			anims_data[current_animation]["fps"] = fps;
+			
 @export var loop = true:
 	set(value):
-		loop = value
+		loop = value;
 		
-		anim_looped[current_animation] = value;
-		
-		notify_property_list_changed();
-		
+		if current_animation.is_empty():
+			return;
+			
+		if anims_data.has(current_animation):
+			anims_data[current_animation]["loop"] = loop;
+			
 @export var playing = true:
 	set(val):
 		if playing != val:
@@ -50,7 +57,7 @@ var atlasTexture:AtlasTexture = AtlasTexture.new();
 @export var sprite_centered = true;
 
 @export_enum("DEFAULT:0", "ASEPRITE:1")
-var center_mode:int = 0:
+var center_mode = 0:
 	set(value):
 		center_mode = value;
 		queue_redraw();
@@ -70,12 +77,13 @@ var animation = 0:
 			
 		current_animation = animations[value];
 		
-		loop = get_animation_loop(current_animation);
+		loop = get_anim_loop(current_animation);
+		fps = get_anim_speed(current_animation);
 		
 var animations = [];
 var infoList = {};
 
-@export var anim_looped = {};
+@export var anims_data = {};
 
 var current_animation = "";
 
@@ -92,8 +100,11 @@ func reload():
 		convert_xml();
 		
 	for i in animations:
-		if !anim_looped.has(i):
-			anim_looped[i] = loop;
+		if !anims_data.has(i):
+			anims_data[i] = {
+				"loop": loop,
+				"fps": fps
+			};
 			
 	notify_property_list_changed();
 	queue_redraw();
@@ -143,9 +154,6 @@ func convert_xml():
 			
 			if !animations.has(anim_name):
 				animations.append(anim_name);
-				
-			if !anim_looped.has(anim_name):
-				anim_looped[anim_name] = loop;
 				
 func convert_json():
 	var file = FileAccess.open(data_path, FileAccess.READ);
@@ -199,10 +207,8 @@ func convert_json():
 				
 			animations.append(anim_name);
 			
-			if !anim_looped.has(anim_name):
-				anim_looped[anim_name] = loop;
-				
 var timer = 0.0;
+
 func _process(delta: float) -> void:
 	scale.x = abs(scale.x) * (-1 if flip_h else 1);
 	scale.y = abs(scale.y) * (-1 if flip_v else 1);
@@ -210,15 +216,26 @@ func _process(delta: float) -> void:
 	if animations.is_empty():
 		return;
 		
+	if fps != anims_data[animations[animation]]["fps"]:
+		fps = float(anims_data[animations[animation]].get("fps", 16.0));
+		queue_redraw();
+		
+	if loop != anims_data[animations[animation]]["loop"]:
+		loop = bool(anims_data[animations[animation]].get("loop", true));
+		queue_redraw();
+		
 	if playing:
 		timer += delta*1000;
-		while timer >= get_frame_duration():
-			timer -= get_frame_duration();
+		
+		var frame_duration = get_frame_duration();
+		
+		while timer >= frame_duration:
+			timer -= frame_duration;
 			frame += 1;
 			
 			if frame >= get_anim_length(animations[animation]):
 				animation_finished.emit();
-				if get_animation_loop(animations[animation]):
+				if get_anim_loop(animations[animation]):
 					frame = 0;
 				else:
 					frame = get_anim_length(animations[animation]) - 1;
@@ -241,19 +258,50 @@ func get_anim_info(anim):
 func get_anim_length(anim):
 	return infoList.get(anim, []).size();
 	
-func set_animation_loop(anim_name, value):
-	anim_looped[anim_name] = value;
+func get_anim_loop(anim):
+	return anims_data.get(anim, {}).get("loop", loop);
 	
-func get_animation_loop(anim):
-	return anim_looped.get(anim, loop);
+func get_anim_speed(anim):
+	return float(anims_data.get(anim, {}).get("fps", fps));
 	
+func set_anim_loop(anim_name, value):
+	if anim_name.is_empty():
+		return;
+		
+	if !anims_data.has(anim_name):
+		anims_data[anim_name] = {
+			"loop": value,
+			"fps": fps
+		};
+		
+	anims_data[anim_name]["loop"] = value;
+	
+	if current_animation == anim_name:
+		loop = value;
+		
+func set_anim_speed(anim_name, value):
+	if anim_name.is_empty():
+		return;
+		
+	if !anims_data.has(anim_name):
+		anims_data[anim_name] = {
+			"loop": loop,
+			"fps": maxf(absf(value), 0.001)
+		};
+		
+	anims_data[anim_name]["fps"] = maxf(absf(value), 0.001);
+	
+	if current_animation == anim_name:
+		fps = maxf(absf(value), 0.001);
+		
 func get_frame_duration():
+	var speed = get_anim_speed(current_animation);
 	var duration = float(get_frame_info(animations[animation]).get("duration", 0.0));
 	
 	if duration <= 0.0:
-		return 1000.0 / fps;
+		return 1000.0 / maxf(speed, 0.001);
 		
-	return duration * (10.0 / fps);
+	return duration * (10.0 / maxf(speed, 0.001));
 	
 func _draw() -> void:
 	if animations.is_empty():
@@ -326,11 +374,13 @@ func play(anim):
 	current_animation = anim;
 	animation = animations.find(anim);
 	
-	loop = get_animation_loop(current_animation);
+	loop = get_anim_loop(current_animation);
+	fps = get_anim_speed(current_animation);
 	
 	playing = true;
 	timer = 0;
 	frame = 0;
+	
 	queue_redraw();
 	
 func _get_property_list():
