@@ -28,24 +28,24 @@ var atlasTexture:AtlasTexture = AtlasTexture.new();
 @export var frame = 0;
 @export var fps = 16.0:
 	set(value):
-		fps = maxf(absf(value), 0.001)
+		fps = maxf(absf(value), 0.001);
 		
-		if current_animation.is_empty():
+		if animations.is_empty():
 			return;
 			
-		if anims_data.has(current_animation):
-			anims_data[current_animation]["fps"] = fps;
-			
+		var anim_name = animations[animation];
+		set_anim_speed(anim_name, value);
+		
 @export var loop = true:
 	set(value):
 		loop = value;
 		
-		if current_animation.is_empty():
+		if animations.is_empty():
 			return;
 			
-		if anims_data.has(current_animation):
-			anims_data[current_animation]["loop"] = loop;
-			
+		var anim_name = animations[animation];
+		set_anim_loop(anim_name, value);
+		
 @export var playing = true:
 	set(val):
 		if playing != val:
@@ -216,14 +216,19 @@ func _process(delta: float) -> void:
 	if animations.is_empty():
 		return;
 		
-	if fps != anims_data[animations[animation]]["fps"]:
-		fps = float(anims_data[animations[animation]].get("fps", 16.0));
-		queue_redraw();
+	if Engine.is_editor_hint():
+		var new_fps = float(anims_data[animations[animation]].get("fps", fps));
+		var new_loop = (anims_data[animations[animation]].get("loop", loop));
 		
-	if loop != anims_data[animations[animation]]["loop"]:
-		loop = bool(anims_data[animations[animation]].get("loop", true));
-		queue_redraw();
-		
+		if !is_equal_approx(fps, new_fps):
+			fps = new_fps;
+			queue_redraw();
+			
+		if loop != new_loop:
+			loop = new_loop;
+			queue_redraw();
+			
+	#print(loop, ' ', anims_data[animations[animation]].get("loop", loop))
 	if playing:
 		timer += delta*1000;
 		
@@ -276,24 +281,20 @@ func set_anim_loop(anim_name, value):
 		
 	anims_data[anim_name]["loop"] = value;
 	
-	if current_animation == anim_name:
-		loop = value;
-		
 func set_anim_speed(anim_name, value):
 	if anim_name.is_empty():
 		return;
 		
+	value = maxf(absf(value), 0.001);
+	
 	if !anims_data.has(anim_name):
 		anims_data[anim_name] = {
 			"loop": loop,
-			"fps": maxf(absf(value), 0.001)
+			"fps": value
 		};
 		
-	anims_data[anim_name]["fps"] = maxf(absf(value), 0.001);
+	anims_data[anim_name]["fps"] = value;
 	
-	if current_animation == anim_name:
-		fps = maxf(absf(value), 0.001);
-		
 func get_frame_duration():
 	var speed = get_anim_speed(current_animation);
 	var duration = float(get_frame_info(animations[animation]).get("duration", 0.0));
