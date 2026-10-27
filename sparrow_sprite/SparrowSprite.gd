@@ -1,6 +1,45 @@
 @tool
 class_name SparrowSprite extends Node2D
 
+@export_group("scenes handler")
+
+enum SCENE_TYPE {
+	RES = 1,
+	ANIMATION_PLAYER = 2
+};
+
+@export var type:SCENE_TYPE = SCENE_TYPE.RES;
+
+@export var export_name = "";
+@export var export_fps = 30.0;
+@export var export_loop = true;
+
+@export_tool_button("Create Scene", "Play")
+var create = _on_create_pressed;
+
+func _on_create_pressed() -> void:
+	if texture == null:
+		return;
+		
+	var anim = export_name if !export_name.is_empty() else name;
+	var handler = SceneHandler.new();
+	
+	match type:
+		SCENE_TYPE.RES:
+			handler.create_res_file(data_path, anim, export_loop, export_fps);
+		SCENE_TYPE.ANIMATION_PLAYER:
+			handler.create_tscn_file(data_path, anim, export_loop, export_fps);
+			
+func create_res(image, anim):
+	var handler = SceneHandler.new();
+	handler.create_res_file(image, anim, export_loop, export_fps);
+	handler.free();
+	
+func create_tscn_file(image, anim):
+	var handler = SceneHandler.new();
+	handler.create_tscn_file(image, anim, export_loop, export_fps);
+	handler.free();
+	
 var atlasTexture:AtlasTexture = AtlasTexture.new();
 
 @export_group("animation path", "")
@@ -155,56 +194,58 @@ func convert_xml():
 			if !animations.has(anim_name):
 				animations.append(anim_name);
 				
-func convert_json():
+
+func convert_json() -> void:
 	var file = FileAccess.open(data_path, FileAccess.READ);
 	
 	if file == null:
-		print("error in ", data_path);
-		return;
+		return
 		
 	var data = JSON.parse_string(file.get_as_text());
+	file.close();
 	
-	if typeof(data) == TYPE_DICTIONARY:
-		var frame_data = data.get("animations", {});
-		var meta = data.get("meta", {});
-		var frame_tags = meta.get("frameTags", []);
+	var frame_data = data.get("frames", {});
+	var meta = data.get("meta", {});
+	var frame_tags = meta.get("frameTags", []);
+	
+	if frame_data.is_empty():
+		return;
 		
-		var frame_names = frame_data.keys();
+	var frame_names = frame_data.keys();
+	
+	for tag in frame_tags:
+		var anim_name = str(tag.get("name", ""));
+		var from_frame = int(tag.get("from", 0));
+		var to_frame = int(tag.get("to", 0));
 		
-		for i in frame_tags:
-			var anim_name = str(i.get("name", ""));
-			var from_frame = int(i.get("from", 0));
-			var to_frame = int(i.get("to", 0));
+		if anim_name.is_empty():
+			continue;
 			
-			if anim_name.is_empty():
+		infoList[anim_name] = [];
+		
+		for j in range(from_frame, to_frame + 1):
+			if j < 0 or j >= frame_names.size():
 				continue;
 				
-			if !infoList.has(anim_name):
-				infoList[anim_name] = [];
-				
-			for j in range(from_frame, to_frame + 1):
-				if j >= frame_names.size():
-					continue;
-					
-				var sprite_frame = frame_data[frame_names[j]].get("frame", {});
-				var sprite_source = frame_data[frame_names[j]].get("spriteSourceSize", {});
-				var source_size = frame_data[frame_names[j]].get("sourceSize", {});
-				
-				var list = {
-					"x": int(sprite_frame.get("x", 0)),
-					"y": int(sprite_frame.get("y", 0)),
-					"width": int(sprite_frame.get("w", 0)),
-					"height": int(sprite_frame.get("h", 0)),
-					"frameX": int(sprite_source.get("x", 0)),
-					"frameY": int(sprite_source.get("y", 0)),
-					"frameWidth": int(source_size.get("w", sprite_frame.get("w", 0))),
-					"frameHeight": int(source_size.get("h", sprite_frame.get("h", 0))),
-					"rotated": bool(frame_data[frame_names[j]].get("rotated", false)),
-					"duration": float(frame_data[frame_names[j]].get("duration", 100))
-				};
-				
-				infoList[anim_name].append(list);
-				
+			var current_frame = frame_data[frame_names[j]];
+			var sprite_frame = current_frame.get("frame", {});
+			var sprite_source = current_frame.get("spriteSourceSize", {});
+			var source_size = current_frame.get("sourceSize", {});
+			
+			infoList[anim_name].append({
+				"x": int(sprite_frame.get("x", 0)),
+				"y": int(sprite_frame.get("y", 0)),
+				"width": int(sprite_frame.get("w", 0)),
+				"height": int(sprite_frame.get("h", 0)),
+				"frameX": int(sprite_source.get("x", 0)),
+				"frameY": int(sprite_source.get("y", 0)),
+				"frameWidth": int(source_size.get("w", sprite_frame.get("w", 0))),
+				"frameHeight": int(source_size.get("h", sprite_frame.get("h", 0))),
+				"rotated": bool(current_frame.get("rotated", false)),
+				"duration": float(current_frame.get("duration", 100))
+			})
+			
+		if !animations.has(anim_name):
 			animations.append(anim_name);
 			
 var timer = 0.0;
