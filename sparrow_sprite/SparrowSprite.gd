@@ -22,24 +22,13 @@ func _on_create_pressed() -> void:
 		return;
 		
 	var anim = export_name if !export_name.is_empty() else name;
-	var handler = SceneHandler.new();
 	
 	match type:
 		SCENE_TYPE.RES:
-			handler.create_res_file(data_path, anim, export_loop, export_fps);
+			SceneHandler.create_res_file(data_path, anim, export_loop, export_fps);
 		SCENE_TYPE.ANIMATION_PLAYER:
-			handler.create_tscn_file(data_path, anim, export_loop, export_fps);
+			SceneHandler.create_tscn_file(data_path, anim, export_loop, export_fps);
 			
-func create_res(image, anim):
-	var handler = SceneHandler.new();
-	handler.create_res_file(image, anim, export_loop, export_fps);
-	handler.free();
-	
-func create_tscn_file(image, anim):
-	var handler = SceneHandler.new();
-	handler.create_tscn_file(image, anim, export_loop, export_fps);
-	handler.free();
-	
 var atlasTexture:AtlasTexture = AtlasTexture.new();
 
 @export_group("animation path", "")
@@ -48,14 +37,15 @@ var atlasTexture:AtlasTexture = AtlasTexture.new();
 		texture = value;
 		atlasTexture.atlas = texture;
 		
-		var json_path = value.resource_path.get_basename() + ".json";
-		var xml_path = value.resource_path.get_basename() + ".xml";
+		var extensions = ["json", "xml", "txt"];
 		
-		if FileAccess.file_exists(json_path):
-			data_path = json_path;
-		elif FileAccess.file_exists(xml_path):
-			data_path = xml_path;
-			
+		for i in extensions:
+			var path = str(value.resource_path.get_basename(), ".", i);
+			if FileAccess.file_exists(path):
+				data_path = path;
+				return;
+				
+		data_path = "";
 		queue_redraw();
 		
 @export_file_path var data_path = "":
@@ -133,11 +123,19 @@ func reload():
 	animations.clear();
 	infoList.clear();
 	
-	if data_path.get_extension().to_lower() == "json":
-		convert_json();
-	else:
-		convert_xml();
+	if data_path == "" or !FileAccess.file_exists(data_path):
+		queue_redraw();
+		notify_property_list_changed();
+		return;
 		
+	match data_path.get_extension().to_lower():
+		"json":
+			convert_json();
+		"xml":
+			convert_xml();
+		"txt":
+			convert_txt();
+			
 	for i in animations:
 		if !anims_data.has(i):
 			anims_data[i] = {
@@ -195,6 +193,63 @@ func convert_xml():
 				animations.append(anim_name);
 				
 
+func convert_txt() -> void:
+	var file = FileAccess.open(data_path, FileAccess.READ)
+	
+	if file == null:
+		return;
+		
+	var txtData = file.get_as_text().split("\n");
+	file.close();
+	
+	var frame_data = {};
+	
+	for i in txtData:
+		i = i.strip_edges();
+		
+		if i == "":
+			continue;
+			
+		var data = i.split("=");
+		
+		if data.size() != 2:
+			continue;
+			
+		var anims = data[0].strip_edges().split("_");
+		var values = data[1].strip_edges().split(" ");
+		
+		var anim_name = anims[0];
+		
+		if !frame_data.has(anim_name):
+			frame_data[anim_name] = [];
+			
+		frame_data[anim_name].append({
+			"index": anims[1].to_int(),
+			"x": values[0].to_int(),
+			"y": values[1].to_int(),
+			"width": values[2].to_int(),
+			"height": values[3].to_int(),
+			"frameX": 0,
+			"frameY": 0,
+			"frameWidth": values[2].to_int(),
+			"frameHeight": values[3].to_int(),
+			"rotated": false,
+			"duration": 100.0
+		});
+		
+	for anim_name in frame_data:
+		var frames = frame_data[anim_name];
+		
+		frames.sort_custom(func(a, b): return a["index"] < b["index"]);
+		
+		infoList[anim_name] = [];
+		
+		for frame_info in frames:
+			infoList[anim_name].append(frame_info);
+			
+		if !animations.has(anim_name):
+			animations.append(anim_name);
+			
 func convert_json() -> void:
 	var file = FileAccess.open(data_path, FileAccess.READ);
 	
@@ -269,7 +324,6 @@ func _process(delta: float) -> void:
 			loop = new_loop;
 			queue_redraw();
 			
-	#print(loop, ' ', anims_data[animations[animation]].get("loop", loop))
 	if playing:
 		timer += delta*1000;
 		

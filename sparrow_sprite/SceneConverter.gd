@@ -1,7 +1,7 @@
 class_name SceneHandler extends Node
 
-func create_res_file(data_path, anim, have_loop, fps):
-	var frames_data = _read_frames(data_path);
+static func create_res_file(data_path, anim, have_loop, fps):
+	var frames_data = get_extension(data_path);
 	
 	if frames_data.is_empty():
 		return;
@@ -9,13 +9,18 @@ func create_res_file(data_path, anim, have_loop, fps):
 	var texture_path = data_path.get_basename() + ".png";
 	
 	var anim_spriteFrames = SpriteFrames.new();
-	anim_spriteFrames.remove_animation("default");
 	
+	for i in anim_spriteFrames.get_animation_names():
+		anim_spriteFrames.remove_animation(i);
+		
 	for anim_name in frames_data:
 		var frames = frames_data[anim_name];
 		
 		if frames.is_empty():
 			continue;
+			
+		if anim_spriteFrames.has_animation(anim_name):
+			anim_spriteFrames.remove_animation(anim_name);
 			
 		anim_spriteFrames.add_animation(anim_name);
 		anim_spriteFrames.set_animation_loop(anim_name, have_loop);
@@ -45,8 +50,8 @@ func create_res_file(data_path, anim, have_loop, fps):
 	ResourceSaver.save(packed_scene, "res://%s.tscn"%[anim], ResourceSaver.FLAG_COMPRESS);
 	ResourceSaver.save(anim_spriteFrames, "res://%s.res"%[anim], ResourceSaver.FLAG_COMPRESS);
 	
-func create_tscn_file(data_path, anim, have_loop, fps):
-	var frames_data = _read_frames(data_path);
+static func create_tscn_file(data_path, anim, have_loop, fps):
+	var frames_data = get_extension(data_path);
 	
 	if frames_data.is_empty():
 		return;
@@ -72,7 +77,7 @@ func create_tscn_file(data_path, anim, have_loop, fps):
 	animPlayer.owner = node;
 	
 	var library = AnimationLibrary.new()
-	var frame_time = 1.0 / maxf(fps, 0.001)
+	var frame_time = 1.0 / maxf(fps, 0.001);
 	
 	for anim_name in frames_data:
 		var frames = frames_data[anim_name];
@@ -98,11 +103,13 @@ func create_tscn_file(data_path, anim, have_loop, fps):
 		for i in range(frames.size()):
 			var frame = frames[i];
 			
-			new_anim.track_insert_key(region_track, i * 0.03, frame["region"]);
-			new_anim.track_insert_key(offset_track, i * 0.03, frame["offset"]);
-			new_anim.track_insert_key(rotation_track, i * 0.03, frame["rotation"]);
+			var time = i * frame_time;
 			
-			new_anim.length = i * 0.03;
+			new_anim.track_insert_key(region_track, time, frame["region"]);
+			new_anim.track_insert_key(offset_track, time, frame["offset"]);
+			new_anim.track_insert_key(rotation_track, time, frame["rotation"]);
+			
+			new_anim.length = (i + 1) * frame_time;
 			
 		anim_name = anim_name.strip_edges().trim_suffix("/");
 		library.add_animation(str(anim_name), new_anim);
@@ -114,7 +121,7 @@ func create_tscn_file(data_path, anim, have_loop, fps):
 	
 	ResourceSaver.save(packed_scene, "res://%s.tscn"%[anim], ResourceSaver.FLAG_COMPRESS);
 	
-func _read_frames(data_path):
+static func get_extension(data_path):
 	if data_path.is_empty():
 		return;
 		
@@ -126,10 +133,12 @@ func _read_frames(data_path):
 			return _read_xml(data_path);
 		"json":
 			return _read_json(data_path);
+		"txt":
+			return _read_txt(data_path);
 		_:
 			return {};
 			
-func _read_xml(path):
+static func _read_xml(path):
 	var fileParser = XMLParser.new()
 	var err = fileParser.open(path)
 	if err != OK:
@@ -197,7 +206,7 @@ func _read_xml(path):
 			
 	return result;
 	
-func _read_json(path):
+static func _read_json(path):
 	var file = FileAccess.open(path, FileAccess.READ);
 	if file == null:
 		return {};
@@ -250,5 +259,51 @@ func _read_json(path):
 				"rotation": 0.0
 			});
 			
+	return result;
+	
+static func _read_txt(path):
+	var file = FileAccess.open(path, FileAccess.READ);
+	
+	if file == null:
+		return;
+		
+	var result = {};
+	var txtData = file.get_as_text().split("\n");
+	file.close();
+	
+	for i in txtData:
+		i = i.strip_edges();
+		
+		if i == "":
+			continue;
+			
+		var data = i.split("=");
+		
+		if data.size() != 2:
+			continue
+			
+		var anims = data[0].strip_edges().split("_");
+		var values = data[1].strip_edges().split(" ");
+		
+		var anim_name = anims[0];
+		
+		if anim_name == "":
+			continue;
+			
+		if !result.has(anim_name):
+			result[anim_name] = [];
+			
+		result[anim_name].append({
+			"frame_index": anims[1].to_int(),
+			"region": Rect2(values[0].to_int(), values[1].to_int(), values[2].to_int(), values[3].to_int()),
+			"margin": Rect2(),
+			"offset": Vector2.ZERO,
+			"rotation": 0.0,
+			"duration": 100.0
+		})
+		
+	for anim_name in result:
+		result[anim_name].sort_custom(func(a, b): return a["frame_index"] < b["frame_index"]);
+		
 	return result;
 	
